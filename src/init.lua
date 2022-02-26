@@ -15,7 +15,7 @@ local ERR_NO_SIGNALS = "No Signals passed"
 local COROUTINE_SUSPENDED = "suspended"
 
 type Signal<T...> = {
-    Connect: ((Signal<T...>, ((T...) -> ())) -> (Connection)),
+    Connect: ((Signal<T...>, ((T...) -> ())) -> (Connection.Connection)),
     Wait: ((Signal<T...>, number?, boolean?) -> (T...)),
     Fire: ((Signal<T...>, T...) -> ())
 }
