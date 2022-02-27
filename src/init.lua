@@ -1,44 +1,5 @@
 --!nonstrict
---local Connection = require(script.Connection)
-
-export type Connection = {
-    Connected: boolean,
-
-    Disconnect: ((Connection) -> ()),
-    Reconnect: ((Connection) -> ()),
-}
-
-local function BLANK_FUNCTION() end
-
-local Connection = {}
-Connection.__index = Connection
-
-function Connection.new()
-    return setmetatable({
-        Connected = false;
-
-        _DisconnectCallback = BLANK_FUNCTION;
-        _ReconnectCallback = BLANK_FUNCTION;
-    }, Connection)
-end
-
-function Connection:Disconnect()
-    if (not self.Connected) then
-        return
-    end
-
-    self.Connected = false
-    self._DisconnectCallback()
-end
-
-function Connection:Reconnect()
-    if (self.Connected) then
-        return
-    end
-
-    self.Connected = true
-    self._ReconnectCallback()
-end
+local Connection = require(script.Connection)
 
 local function BLANK_FUNCTION() end
 
@@ -50,8 +11,6 @@ local ERR_CONNECTION_ALREADY_CREATED = "Connection already created in slot %d"
 local INVALID_ARGUMENT = "Invalid argument #%d (%s expected, got %s)"
 local ERR_WAIT_TIMEOUT = "Wait call timed out (time elapsed: %d)"
 local ERR_NO_SIGNALS = "No Signals passed"
-
-local COROUTINE_SUSPENDED = "suspended"
 
 local TYPE_FUNCTION = "function"
 local TYPE_BOOLEAN = "boolean"
