@@ -39,8 +39,8 @@ function Signal.new(ImmediateFire)
     local self = setmetatable({
         ConnectionCount = 0;
 
-        _ConnectionCallbacks = {};
-        _AwaitingCoroutines = {};
+        _FirstConnection = nil;
+        _LastConnection = nil;
 
         _ImmediateFire = ImmediateFire;
         _OnConnectionsEmpty = BLANK_FUNCTION;
@@ -56,21 +56,58 @@ end
 function Signal:Connect(Callback)
     CheckType(Callback, 1, TYPE_FUNCTION)
 
-    local NewConnection = Connection.new()
+    local NewConnection = Connection.new(Callback)
 
     NewConnection._DisconnectCallback = function()
-        local ConnectionCallbacks = self._ConnectionCallbacks
-        table.remove(ConnectionCallbacks, table.find(ConnectionCallbacks, Callback))
+        local Before = NewConnection._Previous
+        local After = NewConnection._Next
+
+        if (Before) then
+            -- Before ~= nil -> there is something before this connection
+            -- so remove this connection from the chain by pointing previous node's next to next node
+            Before._Next = After
+        else
+            -- Before == nil -> is _FirstConnection
+            -- so replace FirstConnection with the connection after this
+            self._FirstConnection = After
+        end
+
+        if (After) then
+            -- After ~= nil -> there is something after this connection
+            -- so remove this connection from the chain by pointing next node's previous to previous node
+            After._Previous = Before
+        else
+            -- After == nil -> is _LastConnection
+            -- so replace _LastConnection with the connection before this
+            self._LastConnection = Before
+        end
+
+        ---------------------------------------------
+
         self.ConnectionCount -= 1
 
         if (self.ConnectionCount == 0) then
+            self._FirstConnection = nil
             self._OnConnectionsEmpty()
         end
     end
 
     NewConnection._ReconnectCallback = function()
-        local ConnectionCallbacks = self._ConnectionCallbacks
-        table.insert(ConnectionCallbacks, Callback)
+        local LastConnection = self._LastConnection
+        NewConnection._Previous = LastConnection
+    
+        if (LastConnection) then
+            LastConnection._Next = NewConnection
+        end
+    
+        if (not self._FirstConnection) then
+            self._FirstConnection = NewConnection
+        end
+    
+        self._LastConnection = NewConnection
+
+        ---------------------------------------------
+
         self.ConnectionCount += 1
 
         if (self.ConnectionCount == 1) then
@@ -94,17 +131,27 @@ Signal.connect = Signal.Connect
 
 --- Fires the Signal, calling all connected callbacks in their own coroutine.
 function Signal:Fire(...)
-    -- Resume yielded coroutines
-    for _, Awaiting in ipairs(self._AwaitingCoroutines) do
-        task.spawn(Awaiting, ...)
+    debug.profilebegin("Signal.Fire")
+
+    -- Resume all of the connections
+    local Head = self._FirstConnection
+
+    if (not Head) then
+        debug.profileend()
+        return
     end
 
-    table.clear(self._AwaitingCoroutines)
+    while true do
+        task.spawn(Head.Callback, ...)
 
-    -- Spawn new coroutines for the handler callbacks
-    for _, Callback in ipairs(self._ConnectionCallbacks) do
-        task.spawn(Callback, ...)
+        Head = Head._Next
+
+        if (Head == nil) then
+            break
+        end
     end
+
+    debug.profileend()
 end
 Signal.fire = Signal.Fire
 
@@ -117,10 +164,11 @@ function Signal:Wait(Timeout, ThrowErrorOnTimeout)
         CheckType(ThrowErrorOnTimeout, 2, TYPE_BOOLEAN)
     end
 
-    local AwaitingCoroutines = self._AwaitingCoroutines
-    local Temp = self:Connect(BLANK_FUNCTION) -- Need to do this for extended Signals otherwise they are immediate disconnects
     local ActiveCoroutine = coroutine.running()
-    table.insert(AwaitingCoroutines, ActiveCoroutine)
+    local Temp; Temp = self:Connect(function(...)
+        task.spawn(ActiveCoroutine, ...)
+        Temp:Disconnect()
+    end)
 
     local DidTimeout = false
     local DidResume = false
@@ -133,13 +181,11 @@ function Signal:Wait(Timeout, ThrowErrorOnTimeout)
 
         DidTimeout = true
         Temp:Disconnect() -- Safe for coroutine.close to be called
-        table.remove(AwaitingCoroutines, table.find(AwaitingCoroutines, ActiveCoroutine))
-        task.spawn(ActiveCoroutine)
+        task.spawn(ActiveCoroutine, nil)
     end)
 
     local Result = {coroutine.yield()}
     DidResume = true
-    Temp:Disconnect()
 
     if (DidTimeout and ThrowErrorOnTimeout) then
         error(ERR_WAIT_TIMEOUT:format(Timeout))
@@ -151,7 +197,8 @@ Signal.wait = Signal.Wait
 
 --- Flushes all connections from the Signal.
 function Signal:Destroy()
-    self._ConnectionCallbacks = {}
+    self._FirstConnection = nil
+    self._LastConnection = nil
     self.ConnectionCount = 0
     self._OnConnectionsEmpty()
 end
@@ -315,10 +362,5 @@ function Signal.Extend(Signals: {Signal<any>}, ...)
     return NewSignal
 end
 Signal.extend = Signal.Extend
-
---- Same as Signal.Extend, but with a single Signal object.
-function Signal.Wrap(SignalObject: Signal<any>, ...)
-    return Signal.Extend({SignalObject}, ...)
-end
 
 return Signal

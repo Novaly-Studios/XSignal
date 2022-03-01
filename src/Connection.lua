@@ -10,9 +10,10 @@ local function BLANK_FUNCTION() end
 local Connection = {}
 Connection.__index = Connection
 
-function Connection.new()
+function Connection.new(Callback)
     return setmetatable({
         Connected = false;
+        Callback = Callback;
 
         _DisconnectCallback = BLANK_FUNCTION;
         _ReconnectCallback = BLANK_FUNCTION;
