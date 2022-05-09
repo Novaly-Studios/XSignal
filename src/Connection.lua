@@ -8,12 +8,13 @@ export type Connection = {
 local Connection = {}
 Connection.__index = Connection
 
-function Connection.new(Callback, Signal)
+function Connection.new(SignalObject, Callback)
     return setmetatable({
         Connected = false;
         Callback = Callback;
 
-        _Signal = Signal;
+        _Signal = SignalObject;
+        _Next = nil;
     }, Connection)
 end
 
@@ -23,27 +24,20 @@ function Connection:Disconnect()
     end
 
     local SignalRef = self._Signal
-    local Before = self._Previous
-    local After = self._Next
+    local Temp = SignalRef._HeadConnection
 
-    if (Before) then
-        -- Before ~= nil -> there is something before this connection
-        -- so remove this connection from the chain by pointing previous node's next to next node
-        Before._Next = After
-    else
-        -- Before == nil -> is _FirstConnection
-        -- so replace FirstConnection with the connection after this
-        SignalRef._FirstConnection = After
+    if (Temp == nil) then
+        return
     end
 
-    if (After) then
-        -- After ~= nil -> there is something after this connection
-        -- so remove this connection from the chain by pointing next node's previous to previous node
-        After._Previous = Before
+    if (Temp == self) then
+        SignalRef._HeadConnection = self._Next
     else
-        -- After == nil -> is _LastConnection
-        -- so replace _LastConnection with the connection before this
-        SignalRef._LastConnection = Before
+        while (Temp._Next ~= self) do
+            Temp = Temp._Next
+        end
+
+        Temp._Next = self._Next
     end
 
     ---------------------------------------------
@@ -51,7 +45,7 @@ function Connection:Disconnect()
     SignalRef._ConnectionCount -= 1
 
     if (SignalRef._ConnectionCount == 0) then
-        SignalRef._FirstConnection = nil
+        SignalRef._HeadConnection = nil
         SignalRef._OnConnectionsEmpty()
     end
 
@@ -64,18 +58,14 @@ function Connection:Reconnect()
     end
 
     local SignalRef = self._Signal
-    local LastConnection = SignalRef._LastConnection
-    self._Previous = LastConnection
+    local Head = SignalRef._HeadConnection
 
-    if (LastConnection) then
-        LastConnection._Next = self
+    if (Head) then
+        self._Next = Head
+        SignalRef._HeadConnection = self
+    else
+        SignalRef._HeadConnection = self
     end
-
-    if (not SignalRef._FirstConnection) then
-        SignalRef._FirstConnection = self
-    end
-
-    SignalRef._LastConnection = self
 
     ---------------------------------------------
 
