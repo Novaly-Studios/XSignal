@@ -1,5 +1,85 @@
 --!nonstrict
-local Connection = require(script.Connection)
+--local Connection = require(script.Connection)
+
+export type Connection = {
+    Connected: boolean,
+
+    Disconnect: ((Connection) -> ()),
+    Reconnect: ((Connection) -> ()),
+}
+
+local Connection = {}
+Connection.__index = Connection
+
+function Connection.new(SignalObject, Callback)
+    return setmetatable({
+        Connected = false;
+        Callback = Callback;
+
+        _Signal = SignalObject;
+        _Next = nil;
+    }, Connection)
+end
+
+function Connection:Disconnect()
+    if (not self.Connected) then
+        return
+    end
+
+    local SignalRef = self._Signal
+    local Temp = SignalRef._HeadConnection
+
+    if (Temp == nil) then
+        return
+    end
+
+    if (Temp == self) then
+        SignalRef._HeadConnection = self._Next
+    else
+        while (Temp._Next ~= self) do
+            Temp = Temp._Next
+        end
+
+        Temp._Next = self._Next
+    end
+
+    ---------------------------------------------
+
+    SignalRef._ConnectionCount -= 1
+
+    if (SignalRef._ConnectionCount == 0) then
+        SignalRef._HeadConnection = nil
+        SignalRef._OnConnectionsEmpty()
+    end
+
+    self.Connected = false
+end
+
+function Connection:Reconnect()
+    if (self.Connected) then
+        return
+    end
+
+    local SignalRef = self._Signal
+    local Head = SignalRef._HeadConnection
+
+    if (Head) then
+        self._Next = Head
+        SignalRef._HeadConnection = self
+    else
+        SignalRef._HeadConnection = self
+    end
+
+    ---------------------------------------------
+
+    SignalRef._ConnectionCount += 1
+
+    if (SignalRef._ConnectionCount == 1) then
+        SignalRef._OnConnectionsPresent()
+    end
+
+    self.Connected = true
+end
 
 local function BLANK_FUNCTION() end
 
@@ -37,10 +117,9 @@ function Signal.new(ImmediateFire)
     end
 
     local self = setmetatable({
-        ConnectionCount = 0;
+        _ConnectionCount = 0;
 
-        _FirstConnection = nil;
-        _LastConnection = nil;
+        _HeadConnection = nil;
 
         _ImmediateFire = ImmediateFire;
         _OnConnectionsEmpty = BLANK_FUNCTION;
@@ -56,65 +135,7 @@ end
 function Signal:Connect(Callback)
     CheckType(Callback, 1, TYPE_FUNCTION)
 
-    local NewConnection = Connection.new(Callback)
-
-    NewConnection._DisconnectCallback = function()
-        local Before = NewConnection._Previous
-        local After = NewConnection._Next
-
-        if (Before) then
-            -- Before ~= nil -> there is something before this connection
-            -- so remove this connection from the chain by pointing previous node's next to next node
-            Before._Next = After
-        else
-            -- Before == nil -> is _FirstConnection
-            -- so replace FirstConnection with the connection after this
-            self._FirstConnection = After
-        end
-
-        if (After) then
-            -- After ~= nil -> there is something after this connection
-            -- so remove this connection from the chain by pointing next node's previous to previous node
-            After._Previous = Before
-        else
-            -- After == nil -> is _LastConnection
-            -- so replace _LastConnection with the connection before this
-            self._LastConnection = Before
-        end
-
-        ---------------------------------------------
-
-        self.ConnectionCount -= 1
-
-        if (self.ConnectionCount == 0) then
-            self._FirstConnection = nil
-            self._OnConnectionsEmpty()
-        end
-    end
-
-    NewConnection._ReconnectCallback = function()
-        local LastConnection = self._LastConnection
-        NewConnection._Previous = LastConnection
-    
-        if (LastConnection) then
-            LastConnection._Next = NewConnection
-        end
-    
-        if (not self._FirstConnection) then
-            self._FirstConnection = NewConnection
-        end
-    
-        self._LastConnection = NewConnection
-
-        ---------------------------------------------
-
-        self.ConnectionCount += 1
-
-        if (self.ConnectionCount == 1) then
-            self._OnConnectionsPresent()
-        end
-    end
-
+    local NewConnection = Connection.new(self, Callback)
     NewConnection:Reconnect()
 
     local ImmediateFire = self._ImmediateFire
@@ -134,21 +155,11 @@ function Signal:Fire(...)
     debug.profilebegin("Signal.Fire")
 
     -- Resume all of the connections
-    local Head = self._FirstConnection
+    local Head = self._HeadConnection
 
-    if (not Head) then
-        debug.profileend()
-        return
-    end
-
-    while true do
+    while (Head) do
         task.spawn(Head.Callback, ...)
-
         Head = Head._Next
-
-        if (Head == nil) then
-            break
-        end
     end
 
     debug.profileend()
@@ -197,9 +208,8 @@ Signal.wait = Signal.Wait
 
 --- Flushes all connections from the Signal.
 function Signal:Destroy()
-    self._FirstConnection = nil
-    self._LastConnection = nil
-    self.ConnectionCount = 0
+    self._HeadConnection = nil
+    self._ConnectionCount = 0
     self._OnConnectionsEmpty()
 end
 Signal.destroy = Signal.Destroy
