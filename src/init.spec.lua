@@ -1,42 +1,42 @@
 return function()
-    local Signal = require(script.Parent)
+    local XSignal = require(script.Parent)
 
-    describe("Signal.new", function()
+    describe("XSignal.new", function()
         it("should construct", function()
             expect(function()
-                Signal.new()
+                XSignal.new()
             end).never.to.throw()
         end)
 
         it("should reject non-function types as first arg", function()
             expect(function()
-                Signal.new(1)
+                XSignal.new(1)
             end).to.throw()
         end)
 
         it("should accept a function as first arg", function()
             expect(function()
-                Signal.new(function() end)
+                XSignal.new(function() end)
             end).never.to.throw()
         end)
     end)
 
-    describe("Signal.Connect", function()
+    describe("XSignal.Connect", function()
         it("should throw when not given a function", function()
             expect(function()
-                Signal.new():Connect(1)
+                XSignal.new():Connect(1)
             end).to.throw()
         end)
 
         it("should accept a callback", function()
             expect(function()
-                Signal.new():Connect(function() end)
+                XSignal.new():Connect(function() end)
             end).never.to.throw()
         end)
 
         it("should accept multiple callbacks", function()
             expect(function()
-                local Test = Signal.new()
+                local Test = XSignal.new()
                 Test:Connect(function() end)
                 Test:Connect(function() end)
                 Test:Connect(function() end)
@@ -44,7 +44,7 @@ return function()
         end)
 
         it("should allow disconnection", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
 
             local X = Test:Connect(function() end)
             local Y = Test:Connect(function() end)
@@ -62,9 +62,9 @@ return function()
         end)
     end)
 
-    describe("Signal.Connect(ImmediateFire)", function()
+    describe("XSignal.Connect(ImmediateFire)", function()
         it("should immediately fire for new connections using callback (in order)", function()
-            local Test = Signal.new(function(Callback)
+            local Test = XSignal.new(function(Callback)
                 Callback(1, 2)
                 Callback(3, 4)
                 Callback(5, 6)
@@ -81,9 +81,9 @@ return function()
         end)
     end)
 
-    describe("Signal.Fire", function()
+    describe("XSignal.Fire", function()
         it("should execute a connection", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local FiredCount = 0
 
             Test:Connect(function()
@@ -96,7 +96,7 @@ return function()
         end)
 
         it("should execute multiple connections", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local FiredCount = 0
 
             Test:Connect(function()
@@ -117,7 +117,7 @@ return function()
         end)
 
         it("should execute multiple connections async", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local FiredCount = 0
 
             Test:Connect(function()
@@ -138,7 +138,7 @@ return function()
         end)
 
         it("should pass primitive data types", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
 
             Test:Connect(function(X, Y, Z)
                 expect(X).to.equal(1)
@@ -150,7 +150,7 @@ return function()
         end)
 
         it("should pass objects", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local Pass1 = {}
             local Pass2 = {}
 
@@ -163,7 +163,7 @@ return function()
         end)
 
         it("should not execute disconnected connections", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local RunCount = 0
 
             Test:Connect(function()
@@ -183,9 +183,9 @@ return function()
         end)
     end)
 
-    describe("Signal.Wait", function()
-        it("should yield until the signal is fired", function()
-            local Test = Signal.new()
+    describe("XSignal.Wait", function()
+        it("should yield until the XSignal is fired", function()
+            local Test = XSignal.new()
 
             task.delay(0.1, function()
                 Test:Fire()
@@ -195,20 +195,20 @@ return function()
         end)
 
         it("should timeout and pass nil if no error is desired", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             expect(Test:Wait(0.1)).to.equal(nil)
         end)
 
         it("should timeout and throw if an error is desired", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
 
             expect(pcall(function()
                 Test:Wait(0.1, true)
             end)).to.equal(false)
         end)
 
-        it("should return the data passed to the Signal", function()
-            local Test = Signal.new()
+        it("should return the data passed to the XSignal", function()
+            local Test = XSignal.new()
             local TestObject = {}
 
             task.defer(function()
@@ -221,9 +221,34 @@ return function()
         end)
     end)
 
-    describe("Signal.DisconnectAll", function()
+    describe("XSignal.WaitNoTimeout", function()
+        it("should yield until the XSignal is fired", function()
+            local Test = XSignal.new()
+
+            task.delay(0.1, function()
+                Test:Fire()
+            end)
+
+            Test:WaitNoTimeout()
+        end)
+
+        it("should return the data passed to the XSignal", function()
+            local Test = XSignal.new()
+            local TestObject = {}
+
+            task.defer(function()
+                Test:Fire(1, TestObject)
+            end)
+
+            local Primitive, Object = Test:WaitNoTimeout()
+            expect(Primitive).to.equal(1)
+            expect(Object).to.equal(TestObject)
+        end)
+    end)
+
+    describe("XSignal.DisconnectAll", function()
         it("should wipe all connections", function()
-            local Test = Signal.new()
+            local Test = XSignal.new()
             local RunCount = 0
 
             Test:Connect(function()
@@ -245,21 +270,21 @@ return function()
         end)
     end)
 
-    describe("Signal.Extend", function()
-        it("should throw when no Signals to extend are passed", function()
+    describe("XSignal.Extend", function()
+        it("should throw when no XSignals to extend are passed", function()
             expect(function()
-                Signal.Extend()
+                XSignal.Extend()
             end).to.throw()
 
             expect(function()
-                Signal.Extend({})
+                XSignal.Extend({})
             end).to.throw()
         end)
 
-        it("should create a new Signal which replicates firing from a single Signal", function()
+        it("should create a new XSignal which replicates firing from a single XSignal", function()
             local TestObject = {}
-            local SubSignal = Signal.new()
-            local Test = Signal.Extend({SubSignal})
+            local SubSignal = XSignal.new()
+            local Test = XSignal.Extend({SubSignal})
 
             local Data
 
@@ -275,14 +300,14 @@ return function()
             expect(Data[2]).to.equal(TestObject)
         end)
 
-        it("should create a new Signal which replicates firing from multiple Signals", function()
+        it("should create a new XSignal which replicates firing from multiple XSignals", function()
             local TestObject1 = {}
             local TestObject2 = {}
 
-            local SubSignal1 = Signal.new()
-            local SubSignal2 = Signal.new()
+            local SubSignal1 = XSignal.new()
+            local SubSignal2 = XSignal.new()
 
-            local Test = Signal.Extend({SubSignal1, SubSignal2})
+            local Test = XSignal.Extend({SubSignal1, SubSignal2})
 
             local Data
 
@@ -304,99 +329,99 @@ return function()
         end)
     end)
 
-    describe("Signal.AwaitFirst", function()
+    describe("XSignal.AwaitFirst", function()
         it("should throw for incorrect args", function()
             expect(function()
-                Signal.AwaitFirst()
+                XSignal.AwaitFirst()
             end).to.throw()
 
             expect(function()
-                Signal.AwaitFirst({})
+                XSignal.AwaitFirst({})
             end).to.throw()
 
             expect(function()
-                Signal.AwaitFirst({Signal.new()}, "")
+                XSignal.AwaitFirst({XSignal.new()}, "")
             end).to.throw()
 
             expect(function()
-                Signal.AwaitFirst({Signal.new()}, 0.1, "")
+                XSignal.AwaitFirst({XSignal.new()}, 0.1, "")
             end).to.throw()
         end)
 
         it("should timeout and pass nil if no error is desired", function()
-            expect(Signal.AwaitFirst({Signal.new()}, 0.1)).to.equal(nil)
+            expect(XSignal.AwaitFirst({XSignal.new()}, 0.1)).to.equal(nil)
         end)
 
         it("should timeout and throw if an error is desired", function()
             expect(function()
-                Signal.AwaitFirst({Signal.new()}, 0.1, true)
+                XSignal.AwaitFirst({XSignal.new()}, 0.1, true)
             end).to.throw()
         end)
 
-        it("should resume a coroutine with the first Signal to fire", function()
-            local Signal1 = Signal.new()
-            local Signal2 = Signal.new()
+        it("should resume a coroutine with the first XSignal to fire", function()
+            local Signal1 = XSignal.new()
+            local Signal2 = XSignal.new()
 
             task.delay(0.1, function()
                 Signal1:Fire()
             end)
 
-            Signal.AwaitFirst({Signal1, Signal2})
+            XSignal.AwaitFirst({Signal1, Signal2})
 
             task.delay(0.1, function()
                 Signal2:Fire()
             end)
 
-            Signal.AwaitFirst({Signal1, Signal2})
+            XSignal.AwaitFirst({Signal1, Signal2})
         end)
 
-        it("should return the standard 'Wait' data passed from the wrapped Signal", function()
+        it("should return the standard 'Wait' data passed from the wrapped XSignal", function()
             local TestObject = {}
-            local Signal1 = Signal.new()
-            local Signal2 = Signal.new()
+            local Signal1 = XSignal.new()
+            local Signal2 = XSignal.new()
 
             task.delay(0.1, function()
                 Signal1:Fire(1, TestObject)
             end)
 
-            local X, Y = Signal.AwaitFirst({Signal1, Signal2})
+            local X, Y = XSignal.AwaitFirst({Signal1, Signal2})
             expect(X).to.equal(1)
             expect(Y).to.equal(TestObject)
         end)
     end)
 
-    describe("Signal.AwaitAll", function()
+    describe("XSignal.AwaitAll", function()
         it("should throw for incorrect args", function()
             expect(function()
-                Signal.AwaitAll()
+                XSignal.AwaitAll()
             end).to.throw()
 
             expect(function()
-                Signal.AwaitAll({})
+                XSignal.AwaitAll({})
             end).to.throw()
 
             expect(function()
-                Signal.AwaitAll({Signal.new()}, "")
+                XSignal.AwaitAll({XSignal.new()}, "")
             end).to.throw()
 
             expect(function()
-                Signal.AwaitAll({Signal.new()}, 0.1, "")
+                XSignal.AwaitAll({XSignal.new()}, 0.1, "")
             end).to.throw()
         end)
 
         it("should timeout and pass a blank array if no error is desired", function()
-            expect(next(Signal.AwaitAll({Signal.new()}, 0.1))).to.equal(nil)
+            expect(next(XSignal.AwaitAll({XSignal.new()}, 0.1))).to.equal(nil)
         end)
 
         it("should timeout and throw if an error is desired", function()
             expect(function()
-                Signal.AwaitAll({Signal.new()}, 0.1, true)
+                XSignal.AwaitAll({XSignal.new()}, 0.1, true)
             end).to.throw()
         end)
 
-        it("should await all Signals, not just one", function()
-            local Signal1 = Signal.new()
-            local Signal2 = Signal.new()
+        it("should await all XSignals, not just one", function()
+            local Signal1 = XSignal.new()
+            local Signal2 = XSignal.new()
             local Running = coroutine.running()
 
             task.delay(0.1, function()
@@ -407,13 +432,13 @@ return function()
                 Signal2:Fire()
             end)
 
-            Signal.AwaitAll({Signal1, Signal2})
+            XSignal.AwaitAll({Signal1, Signal2})
         end)
 
-        it("should return the standard 'Wait' data passed from the wrapped Signals, in a two-dimensional array format, in the order they were passed into the function", function()
+        it("should return the standard 'Wait' data passed from the wrapped XSignals, in a two-dimensional array format, in the order they were passed into the function", function()
             local TestObject = {}
-            local Signal1 = Signal.new()
-            local Signal2 = Signal.new()
+            local Signal1 = XSignal.new()
+            local Signal2 = XSignal.new()
             local Running = coroutine.running()
 
             task.delay(0.1, function()
@@ -424,7 +449,7 @@ return function()
                 Signal2:Fire(2, TestObject)
             end)
 
-            local Results = Signal.AwaitAll({Signal1, Signal2})
+            local Results = XSignal.AwaitAll({Signal1, Signal2})
             expect(Results).to.be.ok()
             expect(Results).to.be.a("table")
             expect(Results[1]).to.be.ok()
@@ -438,11 +463,11 @@ return function()
         end)
     end)
 
-    describe("Signal.AwaitAllFirstArg", function()
-        it("should return the standard 'Wait' data passed from the wrapped Signals, in a one-dimensional array format, in the order they were passed into the function", function()
+    describe("XSignal.AwaitAllFirstArg", function()
+        it("should return the standard 'Wait' data passed from the wrapped XSignals, in a one-dimensional array format, in the order they were passed into the function", function()
             local TestObject = {}
-            local Signal1 = Signal.new()
-            local Signal2 = Signal.new()
+            local Signal1 = XSignal.new()
+            local Signal2 = XSignal.new()
             local Running = coroutine.running()
 
             task.delay(0.1, function()
@@ -453,7 +478,7 @@ return function()
                 Signal2:Fire(2, TestObject)
             end)
 
-            local Results = Signal.AwaitAllFirstArg({Signal1, Signal2})
+            local Results = XSignal.AwaitAllFirstArg({Signal1, Signal2})
             expect(Results).to.be.ok()
             expect(Results).to.be.a("table")
             expect(Results[1]).to.be.ok()

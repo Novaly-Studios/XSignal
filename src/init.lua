@@ -1,4 +1,3 @@
---!nonstrict
 local Connection = require(script.Connection)
 
 local function BLANK_FUNCTION() end
@@ -10,17 +9,26 @@ local DEFAULT_WAIT_TIMEOUT_SECONDS = 30
 local ERR_CONNECTION_ALREADY_CREATED = "Connection already created in slot %d"
 local INVALID_ARGUMENT = "Invalid argument #%d (%s expected, got %s)"
 local ERR_WAIT_TIMEOUT = "Wait call timed out (time elapsed: %d)"
-local ERR_NO_SIGNALS = "No Signals passed"
+local ERR_NO_SIGNALS = "No XSignals passed"
 
 local TYPE_FUNCTION = "function"
 local TYPE_BOOLEAN = "boolean"
 local TYPE_NUMBER = "number"
 local TYPE_TABLE = "table"
 
-type Signal<T...> = {
-    Connect: ((Signal<T...>, ((T...) -> ())) -> (Connection.Connection)),
-    Wait: ((Signal<T...>, number?, boolean?) -> (T...)),
-    Fire: ((Signal<T...>, T...) -> ())
+export type XSignal<T...> = {
+    Connect: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection)),
+    Wait: ((XSignal<T...>, number?, boolean?) -> (T...)),
+    Fire: ((XSignal<T...>, T...) -> ())
+}
+
+type GenericConnection = RBXScriptConnection | {
+    Disconnect: (GenericConnection) -> ();
+}
+type GenericSignal = RBXScriptSignal | {
+    Connect: (GenericSignal, any...) -> GenericConnection;
+    Wait: (GenericSignal, any...) -> any...;
+    Fire: (GenericSignal, any...) -> ();
 }
 
 local function CheckType(PassedArg: any, ArgNumber: number, ExpectedType: string)
@@ -28,10 +36,10 @@ local function CheckType(PassedArg: any, ArgNumber: number, ExpectedType: string
     assert(GotType == ExpectedType, INVALID_ARGUMENT:format(ArgNumber, ExpectedType, GotType))
 end
 
-local Signal = {}
-Signal.__index = Signal
+local XSignal = {}
+XSignal.__index = XSignal
 
-function Signal.new(ImmediateFire)
+function XSignal.new(ImmediateFire)
     if (ImmediateFire) then
         CheckType(ImmediateFire, 1, TYPE_FUNCTION)
     end
@@ -44,15 +52,15 @@ function Signal.new(ImmediateFire)
         _ImmediateFire = ImmediateFire;
         _OnConnectionsEmpty = BLANK_FUNCTION;
         _OnConnectionsPresent = BLANK_FUNCTION;
-    }, Signal)
+    }, XSignal)
 
     self.Event = self -- Easy to port BindableEvents over in existing codebases
 
     return self
 end
 
---- Creates a new connection object given a callback function, which is called when the Signal is fired.
-function Signal:Connect(Callback)
+--- Creates a new connection object given a callback function, which is called when the XSignal is fired.
+function XSignal:Connect(Callback)
     CheckType(Callback, 1, TYPE_FUNCTION)
 
     local NewConnection = Connection.new(self, Callback)
@@ -68,11 +76,11 @@ function Signal:Connect(Callback)
 
     return NewConnection
 end
-Signal.connect = Signal.Connect
+XSignal.connect = XSignal.Connect
 
---- Fires the Signal, calling all connected callbacks in their own coroutine.
-function Signal:Fire(...)
-    debug.profilebegin("Signal.Fire")
+--- Fires the XSignal, calling all connected callbacks in their own coroutine.
+function XSignal:Fire(...)
+    debug.profilebegin("XSignal.Fire")
 
     -- Resume all of the connections
     local Head = self._HeadConnection
@@ -84,10 +92,10 @@ function Signal:Fire(...)
 
     debug.profileend()
 end
-Signal.fire = Signal.Fire
+XSignal.fire = XSignal.Fire
 
---- Yields the current coroutine until the Signal is fired, returning all data passed when the Signal was fired.
-function Signal:Wait(Timeout, ThrowErrorOnTimeout)
+--- Yields the current coroutine until the XSignal is fired, returning all data passed when the XSignal was fired.
+function XSignal:Wait(Timeout, ThrowErrorOnTimeout)
     Timeout = Timeout or DEFAULT_WAIT_TIMEOUT_SECONDS
     CheckType(Timeout, 1, TYPE_NUMBER)
 
@@ -124,20 +132,32 @@ function Signal:Wait(Timeout, ThrowErrorOnTimeout)
 
     return unpack(Result)
 end
-Signal.wait = Signal.Wait
+XSignal.wait = XSignal.Wait
+
+-- Yields the XSignal indefinitely until it fires
+function XSignal:WaitNoTimeout()
+    local ActiveCoroutine = coroutine.running()
+    local Temp; Temp = self:Connect(function(...)
+        task.spawn(ActiveCoroutine, ...)
+        Temp:Disconnect()
+    end)
+
+    return coroutine.yield()
+end
+XSignal.waitNoTimeout = XSignal.WaitNoTimeout
 
 --- Flushes all connections from the Signal.
-function Signal:Destroy()
+function XSignal:Destroy()
     self._HeadConnection = nil
     self._ConnectionCount = 0
     self._OnConnectionsEmpty()
 end
-Signal.destroy = Signal.Destroy
-Signal.DisconnectAll = Signal.Destroy
-Signal.disconnectAll = Signal.Destroy
+XSignal.destroy = XSignal.Destroy
+XSignal.DisconnectAll = XSignal.Destroy
+XSignal.disconnectAll = XSignal.Destroy
 
---- Awaits the completion of the first Signal object and returns its fired data.
-function Signal.AwaitFirst(Signals: {Signal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): ...any
+--- Awaits the completion of the first XSignal object and returns its fired data.
+function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): ...any
     Timeout = Timeout or DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS
     CheckType(Timeout, 2, TYPE_NUMBER)
     CheckType(Signals, 1, TYPE_TABLE)
@@ -186,11 +206,11 @@ function Signal.AwaitFirst(Signals: {Signal<any>}, Timeout: number?, ThrowErrorO
 
     return unpack(Result)
 end
-Signal.awaitFirst = Signal.AwaitFirst
+XSignal.awaitFirst = XSignal.AwaitFirst
 
 --- Awaits the completion of all Signal objects and returns their fired data in sub-arrays (for multiple arguments).
 --- Return order is maintained for the Signals passed in.
-function Signal.AwaitAll(Signals: {Signal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {{any}}
+function XSignal.AwaitAll(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {{any}}
     Timeout = Timeout or DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS
     CheckType(Timeout, 2, TYPE_NUMBER)
     CheckType(Signals, 1, TYPE_TABLE)
@@ -246,12 +266,12 @@ function Signal.AwaitAll(Signals: {Signal<any>}, Timeout: number?, ThrowErrorOnT
 
     return Result
 end
-Signal.awaitAll = Signal.AwaitAll
+XSignal.awaitAll = XSignal.AwaitAll
 
 --- Awaits the completion of all Signal objects and returns the first item of each of their arguments in an array.
 --- Return order is maintained for the Signals passed in.
-function Signal.AwaitAllFirstArg(Signals: {Signal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {any}
-    local Result = Signal.AwaitAll(Signals, Timeout, ThrowErrorOnTimeout)
+function XSignal.AwaitAllFirstArg(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {any}
+    local Result = XSignal.AwaitAll(Signals, Timeout, ThrowErrorOnTimeout)
     local Reformatted = table.create(#Result)
 
     for Index, Value in pairs(Result) do
@@ -260,14 +280,14 @@ function Signal.AwaitAllFirstArg(Signals: {Signal<any>}, Timeout: number?, Throw
 
     return Reformatted
 end
-Signal.awaitAllFirstArg = Signal.AwaitAllFirstArg
+XSignal.awaitAllFirstArg = XSignal.AwaitAllFirstArg
 
 --- Watches multiple other Signal objects and replicates firing through any of them.
-function Signal.Extend(Signals: {Signal<any>}, ...)
+function XSignal.Extend(Signals: {GenericSignal}, ...)
     CheckType(Signals, 1, TYPE_TABLE)
     assert(#Signals > 0, ERR_NO_SIGNALS)
 
-    local NewSignal = Signal.new(...)
+    local NewSignal = XSignal.new(...)
     local ConnectionsList = table.create(#Signals)
 
     -- Unhook provided signals on object destruction
@@ -291,6 +311,6 @@ function Signal.Extend(Signals: {Signal<any>}, ...)
 
     return NewSignal
 end
-Signal.extend = Signal.Extend
+XSignal.extend = XSignal.Extend
 
-return Signal
+return XSignal
