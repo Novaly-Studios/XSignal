@@ -1,11 +1,6 @@
 {
-  "name": "Signal",
+  "name": "XSignal",
   "tree": {
-    "$className": "DataModel",
-    "ReplicatedFirst": {
-      "$ignoreUnknownInstances": true,
-      "$className": "ReplicatedFirst",
-      "Signal": {"$path": "src"}
-    }
+    "$path": "src"
   }
 }

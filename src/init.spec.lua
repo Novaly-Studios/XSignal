@@ -81,6 +81,10 @@ return function()
         end)
     end)
 
+    describe("XSignal.Once", function()
+        -- TODO
+    end)
+
     describe("XSignal.Fire", function()
         it("should execute a connection", function()
             local Test = XSignal.new()
@@ -217,6 +221,17 @@ return function()
 
             local Primitive, Object = Test:Wait()
             expect(Primitive).to.equal(1)
+            expect(Object).to.equal(TestObject)
+        end)
+
+        it("should return immediately with ImmediateFire", function()
+            local TestObject = {}
+            local Test = XSignal.new(function(Callback)
+                Callback(3210, TestObject)
+            end)
+
+            local Primitive, Object = Test:Wait(0.1, true)
+            expect(Primitive).to.equal(3210)
             expect(Object).to.equal(TestObject)
         end)
     end)

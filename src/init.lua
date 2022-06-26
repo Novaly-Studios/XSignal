@@ -1,25 +1,31 @@
 local Connection = require(script.Connection)
+local TypeGuard = require(script.Parent:WaitForChild("TypeGuard"))
 
 local function BLANK_FUNCTION() end
 
-local DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS = 30
-local DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS = 30
-local DEFAULT_WAIT_TIMEOUT_SECONDS = 30
+local CHECK_TYPES = true
+
+local DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS = 60
+local DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS = 60
+local DEFAULT_WAIT_TIMEOUT_SECONDS = 60
 
 local ERR_CONNECTION_ALREADY_CREATED = "Connection already created in slot %d"
-local INVALID_ARGUMENT = "Invalid argument #%d (%s expected, got %s)"
 local ERR_WAIT_TIMEOUT = "Wait call timed out (time elapsed: %d)"
-local ERR_NO_SIGNALS = "No XSignals passed"
 
-local TYPE_FUNCTION = "function"
-local TYPE_BOOLEAN = "boolean"
-local TYPE_NUMBER = "number"
-local TYPE_TABLE = "table"
+local EMPTY_TABLE = {}
+
+local GenericSignalTypeChecker = TypeGuard.Object({
+    Connect = TypeGuard.Function();
+    Wait = TypeGuard.Function();
+    Fire = TypeGuard.Function();
+}):Or(TypeGuard.RBXScriptSignal())
 
 export type XSignal<T...> = {
-    Connect: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection)),
-    Wait: ((XSignal<T...>, number?, boolean?) -> (T...)),
-    Fire: ((XSignal<T...>, T...) -> ())
+    WaitNoTimeout: ((XSignal<T...>) -> (T...));
+    Connect: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection));
+    Once: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection));
+    Fire: ((XSignal<T...>, T...) -> ());
+    Wait: ((XSignal<T...>, number?, boolean?) -> (T...));
 }
 
 type GenericConnection = RBXScriptConnection | {
@@ -31,25 +37,22 @@ type GenericSignal = RBXScriptSignal | {
     Fire: (GenericSignal, any...) -> ();
 }
 
-local function CheckType(PassedArg: any, ArgNumber: number, ExpectedType: string)
-    local GotType = typeof(PassedArg)
-    assert(GotType == ExpectedType, INVALID_ARGUMENT:format(ArgNumber, ExpectedType, GotType))
-end
-
 local XSignal = {}
 XSignal.__index = XSignal
 
-function XSignal.new(ImmediateFire)
-    if (ImmediateFire) then
-        CheckType(ImmediateFire, 1, TYPE_FUNCTION)
+local NewParams = TypeGuard.Params(TypeGuard.Function():Optional())
+--- Constructs a new XSignal.
+function XSignal.new(ImmediateFire: () -> (...any))
+    if (CHECK_TYPES) then
+        NewParams(ImmediateFire)
     end
 
     local self = setmetatable({
         _ConnectionCount = 0;
 
         _HeadConnection = nil;
-
         _ImmediateFire = ImmediateFire;
+
         _OnConnectionsEmpty = BLANK_FUNCTION;
         _OnConnectionsPresent = BLANK_FUNCTION;
     }, XSignal)
@@ -59,9 +62,12 @@ function XSignal.new(ImmediateFire)
     return self
 end
 
+local ConnectParams = TypeGuard.Params(TypeGuard.Function():Optional())
 --- Creates a new connection object given a callback function, which is called when the XSignal is fired.
 function XSignal:Connect(Callback)
-    CheckType(Callback, 1, TYPE_FUNCTION)
+    if (CHECK_TYPES) then
+        ConnectParams(Callback)
+    end
 
     local NewConnection = Connection.new(self, Callback)
     NewConnection:Reconnect()
@@ -77,6 +83,21 @@ function XSignal:Connect(Callback)
     return NewConnection
 end
 XSignal.connect = XSignal.Connect
+
+local OnceParams = TypeGuard.Params(TypeGuard.Function():Optional())
+--- Connects the XSignal once and then disconnects
+function XSignal:Once(Callback)
+    if (CHECK_TYPES) then
+        OnceParams(Callback)
+    end
+
+    local NewConnection; NewConnection = self:Connect(function(...)
+        NewConnection:Disconnect()
+        Callback(...)
+    end)
+
+    return NewConnection
+end
 
 --- Fires the XSignal, calling all connected callbacks in their own coroutine.
 function XSignal:Fire(...)
@@ -94,18 +115,31 @@ function XSignal:Fire(...)
 end
 XSignal.fire = XSignal.Fire
 
+local WaitParams = TypeGuard.Params(TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
 --- Yields the current coroutine until the XSignal is fired, returning all data passed when the XSignal was fired.
 function XSignal:Wait(Timeout, ThrowErrorOnTimeout)
-    Timeout = Timeout or DEFAULT_WAIT_TIMEOUT_SECONDS
-    CheckType(Timeout, 1, TYPE_NUMBER)
-
-    if (ThrowErrorOnTimeout) then
-        CheckType(ThrowErrorOnTimeout, 2, TYPE_BOOLEAN)
+    if (CHECK_TYPES) then
+        WaitParams(Timeout, ThrowErrorOnTimeout)
     end
+
+    Timeout = Timeout or DEFAULT_WAIT_TIMEOUT_SECONDS
 
     local ActiveCoroutine = coroutine.running()
     local Temp; Temp = self:Connect(function(...)
-        task.spawn(ActiveCoroutine, ...)
+        -- Could return immediately from ImmediateFire, which would cause coroutine library error, so we check here
+        local Args = {...}
+
+        if (self._ImmediateFire) then
+
+            task.defer(function()
+                task.spawn(ActiveCoroutine, Args)
+                Temp:Disconnect()
+            end)
+
+            return
+        end
+
+        task.spawn(ActiveCoroutine, Args)
         Temp:Disconnect()
     end)
 
@@ -120,10 +154,10 @@ function XSignal:Wait(Timeout, ThrowErrorOnTimeout)
 
         DidTimeout = true
         Temp:Disconnect() -- Safe for coroutine.close to be called
-        task.spawn(ActiveCoroutine, nil)
+        task.spawn(ActiveCoroutine, EMPTY_TABLE)
     end)
 
-    local Result = {coroutine.yield()}
+    local Result = coroutine.yield()
     DidResume = true
 
     if (DidTimeout and ThrowErrorOnTimeout) then
@@ -138,11 +172,23 @@ XSignal.wait = XSignal.Wait
 function XSignal:WaitNoTimeout()
     local ActiveCoroutine = coroutine.running()
     local Temp; Temp = self:Connect(function(...)
-        task.spawn(ActiveCoroutine, ...)
+        local Args = {...}
+
+        if (self._ImmediateFire) then
+
+            task.defer(function()
+                task.spawn(ActiveCoroutine, Args)
+                Temp:Disconnect()
+            end)
+
+            return
+        end
+
+        task.spawn(ActiveCoroutine, Args)
         Temp:Disconnect()
     end)
 
-    return coroutine.yield()
+    return unpack(coroutine.yield())
 end
 XSignal.waitNoTimeout = XSignal.WaitNoTimeout
 
@@ -156,21 +202,19 @@ XSignal.destroy = XSignal.Destroy
 XSignal.DisconnectAll = XSignal.Destroy
 XSignal.disconnectAll = XSignal.Destroy
 
+local AwaitLikeParams = TypeGuard.Params(TypeGuard.Array(GenericSignalTypeChecker):MinLength(1), TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
 --- Awaits the completion of the first XSignal object and returns its fired data.
 function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): ...any
-    Timeout = Timeout or DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS
-    CheckType(Timeout, 2, TYPE_NUMBER)
-    CheckType(Signals, 1, TYPE_TABLE)
-    assert(#Signals > 0, ERR_NO_SIGNALS)
-
-    if (ThrowErrorOnTimeout) then
-        CheckType(ThrowErrorOnTimeout, 3, TYPE_BOOLEAN)
+    if (CHECK_TYPES) then
+        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
     end
+
+    Timeout = Timeout or DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS
 
     local ActiveCoroutine = coroutine.running()
     local Connections = table.create(#Signals)
 
-    for Index, Value in ipairs(Signals) do
+    for Index, Value in Signals do
         Connections[Index] = Value:Connect(function(...)
             task.spawn(ActiveCoroutine, ...)
         end)
@@ -186,7 +230,7 @@ function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErr
 
         DidTimeout = true
 
-        for _, SubConnection in ipairs(Connections) do
+        for _, SubConnection in Connections do
             SubConnection:Disconnect()
         end
 
@@ -196,7 +240,7 @@ function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErr
     local Result = {coroutine.yield()}
     DidResume = true
 
-    for _, SubConnection in ipairs(Connections) do
+    for _, SubConnection in Connections do
         SubConnection:Disconnect()
     end
 
@@ -211,14 +255,11 @@ XSignal.awaitFirst = XSignal.AwaitFirst
 --- Awaits the completion of all Signal objects and returns their fired data in sub-arrays (for multiple arguments).
 --- Return order is maintained for the Signals passed in.
 function XSignal.AwaitAll(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {{any}}
-    Timeout = Timeout or DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS
-    CheckType(Timeout, 2, TYPE_NUMBER)
-    CheckType(Signals, 1, TYPE_TABLE)
-    assert(#Signals > 0, ERR_NO_SIGNALS)
-
-    if (ThrowErrorOnTimeout) then
-        CheckType(ThrowErrorOnTimeout, 3, TYPE_BOOLEAN)
+    if (CHECK_TYPES) then
+        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
     end
+
+    Timeout = Timeout or DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS
 
     local TargetCount = #Signals
     local Result = table.create(TargetCount)
@@ -236,14 +277,14 @@ function XSignal.AwaitAll(Signals: {GenericSignal}, Timeout: number?, ThrowError
 
         DidTimeout = true
 
-        for _, SubConnection in ipairs(Connections) do
+        for _, SubConnection in Connections do
             SubConnection:Disconnect()
         end
 
         task.spawn(ActiveCoroutine)
     end)
 
-    for Index, Value in ipairs(Signals) do
+    for Index, Value in Signals do
         local TempConnection; TempConnection = Value:Connect(function(...)
             TempConnection:Disconnect()
             Result[Index] = {...}
@@ -271,10 +312,14 @@ XSignal.awaitAll = XSignal.AwaitAll
 --- Awaits the completion of all Signal objects and returns the first item of each of their arguments in an array.
 --- Return order is maintained for the Signals passed in.
 function XSignal.AwaitAllFirstArg(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {any}
+    if (CHECK_TYPES) then
+        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
+    end
+
     local Result = XSignal.AwaitAll(Signals, Timeout, ThrowErrorOnTimeout)
     local Reformatted = table.create(#Result)
 
-    for Index, Value in pairs(Result) do
+    for Index, Value in Result do
         Reformatted[Index] = Value[1]
     end
 
@@ -282,17 +327,19 @@ function XSignal.AwaitAllFirstArg(Signals: {GenericSignal}, Timeout: number?, Th
 end
 XSignal.awaitAllFirstArg = XSignal.AwaitAllFirstArg
 
+local ExtendParams = TypeGuard.Params(TypeGuard.Array(GenericSignalTypeChecker):MinLength(1))
 --- Watches multiple other Signal objects and replicates firing through any of them.
 function XSignal.Extend(Signals: {GenericSignal}, ...)
-    CheckType(Signals, 1, TYPE_TABLE)
-    assert(#Signals > 0, ERR_NO_SIGNALS)
+    if (CHECK_TYPES) then
+        ExtendParams(Signals)
+    end
 
     local NewSignal = XSignal.new(...)
     local ConnectionsList = table.create(#Signals)
 
     -- Unhook provided signals on object destruction
     NewSignal._OnConnectionsEmpty = function()
-        for Index, SubConnection in ipairs(ConnectionsList) do
+        for Index, SubConnection in ConnectionsList do
             SubConnection:Disconnect()
             ConnectionsList[Index] = nil
         end
@@ -300,7 +347,7 @@ function XSignal.Extend(Signals: {GenericSignal}, ...)
 
     -- Hook into all provided signals
     NewSignal._OnConnectionsPresent = function()
-        for Index, SubSignal in ipairs(Signals) do
+        for Index, SubSignal in Signals do
             assert(ConnectionsList[Index] == nil, ERR_CONNECTION_ALREADY_CREATED:format(Index))
 
             ConnectionsList[Index] = SubSignal:Connect(function(...)
