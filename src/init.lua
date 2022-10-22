@@ -31,10 +31,19 @@ type Connection = Connection.Connection;
 
 export type XSignal<T...> = {
     WaitNoTimeout: (() -> (T...));
+    DisconnectAll: (() -> ());
+    Destroy: (() -> ());
     Connect: (((T...) -> ()) -> (Connection));
     Once: (((T...) -> ()) -> (Connection));
     Fire: ((T...) -> ());
     Wait: ((number?, boolean?) -> (T...));
+
+    waitNoTimeout: (() -> (T...));
+    disconnectAll: (() -> ());
+    connect: (((T...) -> ()) -> (Connection));
+    once: (((T...) -> ()) -> (Connection));
+    fire: ((T...) -> ());
+    wait: ((number?, boolean?) -> (T...));
 }
 type GenericConnection = RBXScriptConnection | {
     Disconnect: (GenericConnection) -> ();
@@ -213,11 +222,13 @@ XSignal.waitNoTimeout = XSignal.WaitNoTimeout
 
 --- Flushes all connections from the Signal.
 function XSignal:Destroy()
-    self._HeadConnection = false
-    self._ConnectionCount = 0
-    self._OnConnectionsEmpty()
+    local Head = self._HeadConnection
+
+    while (Head) do
+        Head:Disconnect()
+        Head = Head._Next
+    end
 end
-XSignal.destroy = XSignal.Destroy
 XSignal.DisconnectAll = XSignal.Destroy
 XSignal.disconnectAll = XSignal.Destroy
 

@@ -26,7 +26,7 @@ function Connection:Disconnect()
     local SignalRef = self._Signal
     local Temp = SignalRef._HeadConnection
 
-    if (Temp == nil) then
+    if (not Temp) then
         return
     end
 
@@ -45,7 +45,7 @@ function Connection:Disconnect()
     SignalRef._ConnectionCount -= 1
 
     if (SignalRef._ConnectionCount == 0) then
-        SignalRef._HeadConnection = nil
+        SignalRef._HeadConnection = false
         SignalRef._OnConnectionsEmpty()
     end
 

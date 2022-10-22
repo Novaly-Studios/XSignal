@@ -368,6 +368,55 @@ return function()
             Test:Fire()
             expect(RunCount).to.equal(0)
         end)
+
+        it("should not error on multiple disconnections", function()
+            local Test = XSignal.new()
+            local X = Test:Connect(function() end)
+            Test:DisconnectAll()
+
+            expect(function()
+                X:Disconnect()
+            end).never.to.throw()
+        end)
+
+        it("should not reconnect the whole chain when Reconnect is called, and should set Connected = false", function()
+            local Test = XSignal.new()
+            local Count = 0
+
+            local X = Test:Connect(function()
+                Count += 1
+            end)
+
+            local Y = Test:Connect(function()
+                Count += 1
+            end)
+
+            local Z = Test:Connect(function()
+                Count += 1
+            end)
+
+            expect(Count).to.equal(0)
+            Test:Fire()
+            expect(Count).to.equal(3)
+            Test:DisconnectAll()
+            Test:Fire()
+            expect(Count).to.equal(3)
+
+            Count = 0
+            X:Reconnect()
+            Test:Fire()
+            expect(Count).to.equal(1)
+
+            Count = 0
+            Z:Reconnect()
+            Test:Fire()
+            expect(Count).to.equal(2)
+
+            Count = 0
+            Y:Reconnect()
+            Test:Fire()
+            expect(Count).to.equal(3)
+        end)
     end)
 
     describe("XSignal.Extend", function()
