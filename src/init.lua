@@ -52,9 +52,9 @@ XSignal.__index = XSignal
 
 local NewParams = TypeGuard.Params(TypeGuard.Function():Optional(), TypeGuard.Function():Optional())
 --- Constructs a new XSignal.
-function XSignal.new<T...>(ImmediateFire: ((T...) -> (T...))?, Validator: ((T...) -> ())?): XSignal<T...>
+function XSignal.new<T...>(Validator: ((T...) -> ())?, ImmediateFire: ((T...) -> (T...))?): XSignal<T...>
     if (CHECK_TYPES) then
-        NewParams(ImmediateFire, Validator)
+        NewParams(Validator, ImmediateFire)
     end
 
     local self = setmetatable({
@@ -66,9 +66,11 @@ function XSignal.new<T...>(ImmediateFire: ((T...) -> (T...))?, Validator: ((T...
 
         _OnConnectionsEmpty = EmptyFunction;
         _OnConnectionsPresent = EmptyFunction;
+
+        Event = false;
     }, XSignal)
 
-    self.Event = self -- Easy to port BindableEvents over in existing codebases
+    self.Event = self -- This makes it easy to port BindableEvents over in existing codebases
 
     return self
 end

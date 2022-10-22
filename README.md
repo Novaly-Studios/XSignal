@@ -16,7 +16,7 @@ local SomethingElse = Test:Wait(2, true) -- Throws error due to timeout
 
 ```lua
 -- Extend wraps a generic Signal or a list of generic Signals and funnels invocations directly to the new constructed XSignal
-local PlayerExists = XSignal.Extend(Players.PlayerAdded, function(Callback)
+local PlayerExists = XSignal.Extend(Players.PlayerAdded, nil, function(Callback)
     for _, Player in Players:GetPlayers() do
         Callback(Player)
     end
@@ -34,7 +34,7 @@ XSignal.Extend({ game:GetService("Workspace").ChildAdded, game:GetService("Playe
 ### 3: Data Validation
 
 ```lua
-local Test = XSignal.new(nil, function(X, Y)
+local Test = XSignal.new(function(X, Y)
     assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
 end)
 
@@ -44,7 +44,7 @@ Test:Fire() -- Reject
 Test:Fire("") -- Reject
 
 -- Same as above but with TypeGuard: https://github.com/Novaly-Studios/TypeGuard
-local Another = XSignal.new(nil, TypeGuard.Params(TypeGuard.Number(), TypeGuard.String():Optional())) :: XSignal<number, string?>
+local Another = XSignal.new(TypeGuard.Params(TypeGuard.Number(), TypeGuard.String():Optional())) :: XSignal<number, string?>
 ```
 
 ### 4: Waiting for the first of a list of Signals to fire

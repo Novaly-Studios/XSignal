@@ -27,7 +27,7 @@ return function()
 
         it("should accept a validator function", function()
             expect(function()
-                XSignal.new(nil, function(X, Y)
+                XSignal.new(function(X, Y)
                     assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
                 end)
             end).never.to.throw()
@@ -77,7 +77,7 @@ return function()
 
     describe("XSignal.Connect(ImmediateFire)", function()
         it("should immediately fire for new connections using callback (in order)", function()
-            local Test = XSignal.new(function(Callback)
+            local Test = XSignal.new(nil, function(Callback)
                 Callback(1, 2)
                 Callback(3, 4)
                 Callback(5, 6)
@@ -250,7 +250,7 @@ return function()
         end)
 
         it("should execute the validator before firing & pass all params", function()
-            local Test = XSignal.new(nil, function(X, Y)
+            local Test = XSignal.new(function(X, Y)
                 assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
             end)
             
@@ -311,7 +311,7 @@ return function()
 
         it("should return immediately with ImmediateFire", function()
             local TestObject = {}
-            local Test = XSignal.new(function(Callback)
+            local Test = XSignal.new(nil, function(Callback)
                 Callback(3210, TestObject)
             end)
 
