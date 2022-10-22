@@ -1,3 +1,8 @@
+local function anyfn(...) return ({} :: any) end
+it = it or anyfn
+expect = expect or anyfn
+describe = describe or anyfn
+
 return function()
     local XSignal = require(script.Parent)
 
@@ -17,6 +22,14 @@ return function()
         it("should accept a function as first arg", function()
             expect(function()
                 XSignal.new(function() end)
+            end).never.to.throw()
+        end)
+
+        it("should accept a validator function", function()
+            expect(function()
+                XSignal.new(nil, function(X, Y)
+                    assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
+                end)
             end).never.to.throw()
         end)
     end)
@@ -82,7 +95,57 @@ return function()
     end)
 
     describe("XSignal.Once", function()
-        -- TODO
+        it("should reject incorrect type args", function()
+            expect(function()
+                XSignal.new():Once(1)
+            end).to.throw()
+        end)
+
+        it("should accept correct arg type", function()
+            expect(function()
+                XSignal.new():Once(function() end)
+            end).never.to.throw()
+        end)
+
+        it("should only fire once & return the passed values", function()
+            local Test = XSignal.new()
+
+            local Count = 0
+            local GotX, GotY
+
+            Test:Once(function(X, Y)
+                Count += 1
+                GotX = X
+                GotY = Y
+            end)
+
+            expect(Count).to.equal(0)
+            expect(GotX).to.equal(nil)
+            expect(GotY).to.equal(nil)
+            Test:Fire(10, 20)
+            expect(Count).to.equal(1)
+            expect(GotX).to.equal(10)
+            expect(GotY).to.equal(20)
+            Test:Fire(30, 40)
+            expect(Count).to.equal(1)
+            expect(GotX).to.equal(10)
+            expect(GotY).to.equal(20)
+        end)
+
+        it("should return a connection & allow disconnection", function()
+            local Test = XSignal.new()
+
+            local Count = 0
+
+            local Connection = Test:Once(function()
+                Count += 1
+            end)
+            expect(Connection).to.be.ok()
+            Connection:Disconnect()
+            expect(Count).to.equal(0)
+            Test:Fire()
+            expect(Count).to.equal(0)
+        end)
     end)
 
     describe("XSignal.Fire", function()
@@ -184,6 +247,28 @@ return function()
 
             Test:Fire()
             expect(RunCount).to.equal(2)
+        end)
+
+        it("should execute the validator before firing & pass all params", function()
+            local Test = XSignal.new(nil, function(X, Y)
+                assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
+            end)
+            
+            expect(function()
+                Test:Fire(1, "") -- Accept
+            end).never.to.throw()
+
+            expect(function()
+                Test:Fire(2) -- Accept
+            end).never.to.throw()
+
+            expect(function()
+                Test:Fire() -- Reject
+            end).to.throw()
+
+            expect(function()
+                Test:Fire("") -- Reject
+            end).to.throw()
         end)
     end)
 

@@ -4,10 +4,10 @@ registry = "test"
 
 [[package]]
 name = "tpc9000/typeguard"
-version = "2.2.0"
+version = "3.0.0"
 dependencies = []
 
 [[package]]
 name = "tpc9000/xsignal"
 version = "0.1.0"
-dependencies = [["TypeGuard", "tpc9000/typeguard@2.2.0"]]
+dependencies = [["TypeGuard", "tpc9000/typeguard@3.0.0"]]

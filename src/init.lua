@@ -1,7 +1,14 @@
-local Connection = require(script.Connection)
+---!nonstrict
+
+-- Allows easy command bar paste:
+if (not script) then
+    script = game:GetService("ReplicatedFirst").XSignal
+end
+
+local Connection = require(script:WaitForChild("Connection"))
 local TypeGuard = require(script.Parent:WaitForChild("TypeGuard"))
 
-local function BLANK_FUNCTION() end
+local function EmptyFunction() end
 
 local CHECK_TYPES = true
 
@@ -14,47 +21,51 @@ local ERR_WAIT_TIMEOUT = "Wait call timed out (time elapsed: %d)"
 
 local EMPTY_TABLE = {}
 
-local GenericSignalTypeChecker = TypeGuard.Object({
+local GenericMinimalSignalTypeChecker = TypeGuard.RBXScriptSignal():Or(TypeGuard.Object({
     Connect = TypeGuard.Function();
     Wait = TypeGuard.Function();
     Fire = TypeGuard.Function();
-}):Or(TypeGuard.RBXScriptSignal())
+}))
+
+type Connection = Connection.Connection;
 
 export type XSignal<T...> = {
-    WaitNoTimeout: ((XSignal<T...>) -> (T...));
-    Connect: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection));
-    Once: ((XSignal<T...>, ((T...) -> ())) -> (Connection.Connection));
-    Fire: ((XSignal<T...>, T...) -> ());
-    Wait: ((XSignal<T...>, number?, boolean?) -> (T...));
+    WaitNoTimeout: (() -> (T...));
+    Connect: (((T...) -> ()) -> (Connection));
+    Once: (((T...) -> ()) -> (Connection));
+    Fire: ((T...) -> ());
+    Wait: ((number?, boolean?) -> (T...));
 }
-
 type GenericConnection = RBXScriptConnection | {
     Disconnect: (GenericConnection) -> ();
 }
-type GenericSignal = RBXScriptSignal | {
-    Connect: (GenericSignal, any...) -> GenericConnection;
-    Wait: (GenericSignal, any...) -> any...;
-    Fire: (GenericSignal, any...) -> ();
+type GenericMinimalSignal<T...> = RBXScriptSignal<T...> | {
+    Connect: (((T...) -> ()) -> (Connection));
+    Fire: ((T...) -> ());
+    Wait: ((number?, boolean?) -> (T...));
 }
 
+--- @class XSignal
+--- E(X)tended Signal class: adds additional memory leak prevention features & useful utilities to the Signal pattern.
 local XSignal = {}
 XSignal.__index = XSignal
 
-local NewParams = TypeGuard.Params(TypeGuard.Function():Optional())
+local NewParams = TypeGuard.Params(TypeGuard.Function():Optional(), TypeGuard.Function():Optional())
 --- Constructs a new XSignal.
-function XSignal.new(ImmediateFire: () -> (...any))
+function XSignal.new<T...>(ImmediateFire: ((T...) -> (T...))?, Validator: ((T...) -> ())?): XSignal<T...>
     if (CHECK_TYPES) then
-        NewParams(ImmediateFire)
+        NewParams(ImmediateFire, Validator)
     end
 
     local self = setmetatable({
         _ConnectionCount = 0;
 
-        _HeadConnection = nil;
+        _Validator = Validator;
         _ImmediateFire = ImmediateFire;
+        _HeadConnection = false;
 
-        _OnConnectionsEmpty = BLANK_FUNCTION;
-        _OnConnectionsPresent = BLANK_FUNCTION;
+        _OnConnectionsEmpty = EmptyFunction;
+        _OnConnectionsPresent = EmptyFunction;
     }, XSignal)
 
     self.Event = self -- Easy to port BindableEvents over in existing codebases
@@ -102,6 +113,12 @@ end
 --- Fires the XSignal, calling all connected callbacks in their own coroutine.
 function XSignal:Fire(...)
     debug.profilebegin("XSignal.Fire")
+
+    local Validator = self._Validator
+
+    if (Validator) then
+        Validator(...)
+    end
 
     -- Resume all of the connections
     local Head = self._HeadConnection
@@ -168,7 +185,7 @@ function XSignal:Wait(Timeout, ThrowErrorOnTimeout)
 end
 XSignal.wait = XSignal.Wait
 
--- Yields the XSignal indefinitely until it fires
+-- Yields the XSignal indefinitely until it fires. Not recommended unless necessary.
 function XSignal:WaitNoTimeout()
     local ActiveCoroutine = coroutine.running()
     local Temp; Temp = self:Connect(function(...)
@@ -194,7 +211,7 @@ XSignal.waitNoTimeout = XSignal.WaitNoTimeout
 
 --- Flushes all connections from the Signal.
 function XSignal:Destroy()
-    self._HeadConnection = nil
+    self._HeadConnection = false
     self._ConnectionCount = 0
     self._OnConnectionsEmpty()
 end
@@ -202,11 +219,11 @@ XSignal.destroy = XSignal.Destroy
 XSignal.DisconnectAll = XSignal.Destroy
 XSignal.disconnectAll = XSignal.Destroy
 
-local AwaitLikeParams = TypeGuard.Params(TypeGuard.Array(GenericSignalTypeChecker):MinLength(1), TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
+local AwaitFirstParams = TypeGuard.Params(TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1), TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
 --- Awaits the completion of the first XSignal object and returns its fired data.
-function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): ...any
+function XSignal.AwaitFirst(Signals: {GenericMinimalSignal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): ...any
     if (CHECK_TYPES) then
-        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
+        AwaitFirstParams(Signals, Timeout, ThrowErrorOnTimeout)
     end
 
     Timeout = Timeout or DEFAULT_AWAIT_FIRST_TIMEOUT_SECONDS
@@ -252,11 +269,12 @@ function XSignal.AwaitFirst(Signals: {GenericSignal}, Timeout: number?, ThrowErr
 end
 XSignal.awaitFirst = XSignal.AwaitFirst
 
+local AwaitAllParams = TypeGuard.Params(TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1), TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
 --- Awaits the completion of all Signal objects and returns their fired data in sub-arrays (for multiple arguments).
 --- Return order is maintained for the Signals passed in.
-function XSignal.AwaitAll(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {{any}}
+function XSignal.AwaitAll(Signals: {GenericMinimalSignal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {{any}}
     if (CHECK_TYPES) then
-        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
+        AwaitAllParams(Signals, Timeout, ThrowErrorOnTimeout)
     end
 
     Timeout = Timeout or DEFAULT_AWAIT_ALL_TIMEOUT_SECONDS
@@ -309,11 +327,12 @@ function XSignal.AwaitAll(Signals: {GenericSignal}, Timeout: number?, ThrowError
 end
 XSignal.awaitAll = XSignal.AwaitAll
 
+local AwaitAllFirstArgParams = TypeGuard.Params(TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1), TypeGuard.Number():Optional(), TypeGuard.Boolean():Optional())
 --- Awaits the completion of all Signal objects and returns the first item of each of their arguments in an array.
 --- Return order is maintained for the Signals passed in.
-function XSignal.AwaitAllFirstArg(Signals: {GenericSignal}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {any}
+function XSignal.AwaitAllFirstArg(Signals: {GenericMinimalSignal<any>}, Timeout: number?, ThrowErrorOnTimeout: boolean?): {any}
     if (CHECK_TYPES) then
-        AwaitLikeParams(Signals, Timeout, ThrowErrorOnTimeout)
+        AwaitAllFirstArgParams(Signals, Timeout, ThrowErrorOnTimeout)
     end
 
     local Result = XSignal.AwaitAll(Signals, Timeout, ThrowErrorOnTimeout)
@@ -327,11 +346,15 @@ function XSignal.AwaitAllFirstArg(Signals: {GenericSignal}, Timeout: number?, Th
 end
 XSignal.awaitAllFirstArg = XSignal.AwaitAllFirstArg
 
-local ExtendParams = TypeGuard.Params(TypeGuard.Array(GenericSignalTypeChecker):MinLength(1))
+local ExtendParams = TypeGuard.Params(TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1):Or(GenericMinimalSignalTypeChecker))
 --- Watches multiple other Signal objects and replicates firing through any of them.
-function XSignal.Extend(Signals: {GenericSignal}, ...)
+function XSignal.Extend(Signals: {GenericMinimalSignal<any>} | GenericMinimalSignal<any>, ...): XSignal<any>
     if (CHECK_TYPES) then
         ExtendParams(Signals)
+    end
+    
+    if (not (Signals :: {})[1]) then
+        Signals = {Signals}
     end
 
     local NewSignal = XSignal.new(...)
@@ -347,7 +370,7 @@ function XSignal.Extend(Signals: {GenericSignal}, ...)
 
     -- Hook into all provided signals
     NewSignal._OnConnectionsPresent = function()
-        for Index, SubSignal in Signals do
+        for Index, SubSignal in (Signals :: {GenericMinimalSignal<any>}) do
             assert(ConnectionsList[Index] == nil, ERR_CONNECTION_ALREADY_CREATED:format(Index))
 
             ConnectionsList[Index] = SubSignal:Connect(function(...)

@@ -1,8 +1,8 @@
 export type Connection = {
     Connected: boolean,
 
-    Disconnect: ((Connection) -> ()),
-    Reconnect: ((Connection) -> ()),
+    Disconnect: (() -> ()),
+    Reconnect: (() -> ()),
 }
 
 local Connection = {}
