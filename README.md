@@ -1,6 +1,6 @@
 # XSignal
 
-E(X)tended signal is an API implementing Roblox's default Signal pattern, wiht some useful additions to help prevent memory leaks and manage multiple Signals. This should be compatible with any other Signal library too.
+E(X)tended signal is an API implementing Roblox's default Signal pattern, with some useful additions to help prevent memory leaks and manage multiple Signals. This should be compatible with any other Signal library too.
 
 ## Usage Examples (additional features vs regular Signals)
 
@@ -15,8 +15,8 @@ local SomethingElse = Test:Wait(2, true) -- Throws error due to timeout
 ### 2: Extension and "immediate fire" mode
 
 ```lua
--- Extend wraps a generic Signal or a list of generic Signals and funnels invocations directly to the new constructed XSignal
-local PlayerExists = XSignal.Extend(Players.PlayerAdded, nil, function(Callback)
+-- fromExtension wraps a generic Signal or a list of generic Signals and funnels invocations directly to the new constructed XSignal
+local PlayerExists = XSignal.fromExtension(Players.PlayerAdded, nil, function(Callback)
     for _, Player in Players:GetPlayers() do
         Callback(Player)
     end
@@ -27,8 +27,8 @@ PlayerExists:Connect(function(Player)
     -- ...
 end)
 
--- Extend also supports passing a list
-XSignal.Extend({ game:GetService("Workspace").ChildAdded, game:GetService("Players").PlayerAdded })
+-- fromExtension also supports passing a list
+XSignal.fromExtension({ game:GetService("Workspace").ChildAdded, game:GetService("Players").PlayerAdded })
 ```
 
 ### 3: Data Validation
@@ -55,11 +55,11 @@ local Test2 = XSignal.new()
 local Test3 = Players.PlayerAdded
 
 task.delay(0.1, function()
-    Test1:Fire("Test1 fired")
+    Test1:Fire("Test1 fired", "Something else")
 end)
 
 print(XSignal.AwaitFirst({Test1, Test2, Test3}))
---> Test1 fired
+--> Test1 fired    Something else
 
 XSignal.AwaitFirst({Test1, Test2, Test3}, 10, true) -- Optional timeout & error on timeout args
 ```
@@ -78,13 +78,39 @@ local function FireThem()
 end
 
 task.delay(0.1, FireThem)
-print(XSignal.AwaitAll({Test1, Test2, Test3}))
---> {{"Test1 fired"}, {"Test3 fired"}, {"Test2 fired", "Another arg"}}
-
-task.delay(0.1, FireThem)
-print(XSignal.AwaitAllFirstArg({Test1, Test2, Test3}))
+print(XSignal.AwaitAll({Test1, Test2, Test3})) -- Extracts only first arg
 --> {"Test1 fired", "Test3 fired", "Test2 fired"}
 
-XSignal.AwaitAll({Test1, Test2, Test3}, 10, true) -- Optional timeout & error on timeout args
-XSignal.AwaitAllFirstArg({Test1, Test2, Test3}, 10, true)
+task.delay(0.1, FireThem)
+print(XSignal.AwaitAllFull({Test1, Test2, Test3}))
+--> {{"Test1 fired"}, {"Test3 fired"}, {"Test2 fired", "Another arg"}}
+
+ -- Optional timeout & error on timeout args
+XSignal.AwaitAllFull({Test1, Test2, Test3}, 10, true)
+XSignal.AwaitAll({Test1, Test2, Test3}, 10, true)
+```
+
+### 6: Collecting first x fires
+
+```lua
+local Test = XSignal.new()
+
+task.delay(0.1, function()
+    Test:Fire("Test1 fired")
+    Test:Fire("Test2 fired")
+    Test:Fire("Test3 fired")
+end)
+
+print(Test:Collect(2))
+--> {"Test1 fired", "Test2 fired"}
+
+task.spawn(function()
+    task.wait()
+    Test:Fire("Test1 fired")
+    task.wait()
+    Test:Fire("Test2 fired")
+end)
+
+print(Test:CollectFull(2))
+--> {{"Test1 fired"}, {"Test2 fired"}}
 ```

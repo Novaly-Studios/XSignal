@@ -15,6 +15,8 @@ function Connection.new(SignalObject, Callback)
 
         _Signal = SignalObject;
         _Next = nil;
+
+        OnDisconnect = nil;
     }, Connection)
 end
 
@@ -50,6 +52,12 @@ function Connection:Disconnect()
     end
 
     self.Connected = false
+
+    local OnDisconnect = self.OnDisconnect
+
+    if (OnDisconnect) then
+        OnDisconnect()
+    end
 end
 
 function Connection:Reconnect()
