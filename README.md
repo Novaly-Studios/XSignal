@@ -90,7 +90,7 @@ XSignal.AwaitAllFull({Test1, Test2, Test3}, 10, true)
 XSignal.AwaitAll({Test1, Test2, Test3}, 10, true)
 ```
 
-### 6: Collecting first x fires
+### 6: Collecting first n fires
 
 ```lua
 local Test = XSignal.new()
