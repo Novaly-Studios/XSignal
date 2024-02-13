@@ -25,14 +25,14 @@ local GenericMinimalSignalTypeChecker = TypeGuard.RBXScriptSignal():Or(TypeGuard
 
 type Connection = Connection.Connection;
 
-type XSignal_WaitIndefinite<T...> = (() -> (T...));
-type XSignal_CollectFull<T...> = ((number, number?, boolean?) -> ({{any}}));
-type XSignal_Destroy<T...> = (() -> ());
-type XSignal_Collect<T...> = ((number, number?, boolean?) -> ({any}));
-type XSignal_Connect<T...> = (((T...) -> ()) -> (Connection));
-type XSignal_Once<T...> = (((T...) -> ()) -> (Connection));
-type XSignal_Fire<T...> = ((T...) -> ());
-type XSignal_Wait<T...> = ((number?, boolean?) -> (T...));
+type XSignal_WaitIndefinite<T...> = ((XSignal<T...>) -> (T...));
+type XSignal_CollectFull<T...> = ((XSignal<T...>, number, number?, boolean?) -> ({{any}}));
+type XSignal_Destroy<T...> = ((XSignal<T...>) -> ());
+type XSignal_Collect<T...> = ((XSignal<T...>, number, number?, boolean?) -> ({any}));
+type XSignal_Connect<T...> = ((XSignal<T...>, (T...) -> ()) -> (Connection));
+type XSignal_Once<T...> = ((XSignal<T...>, (T...) -> ()) -> (Connection));
+type XSignal_Fire<T...> = ((XSignal<T...>, T...) -> ());
+type XSignal_Wait<T...> = ((XSignal<T...>, number?, boolean?) -> (T...));
 
 export type XSignal<T...> = {
     WaitIndefinite: XSignal_WaitIndefinite<T...>;
