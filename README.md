@@ -88,7 +88,8 @@ end
 
 task.delay(0.1, FireThem)
 print(XSignal.AwaitAll({Test1, Test2, Test3}))
---> {"Test1 fired", "Test3 fired", "Test2 fired"}
+--> {"Test1 fired", "Test2 fired", "Test3 fired"}
+-- Maintains order of the input signals.
 
 -- Optional timeout & error on timeout args.
 XSignal.AwaitAll({Test1, Test2, Test3}, 10, true)
