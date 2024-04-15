@@ -1,6 +1,6 @@
 # XSignal
 
-E(X)tended signal is an API implementing Roblox's default Signal pattern, with some useful additions to help prevent memory leaks and manage multiple Signals. This should be compatible with any other Signal library too.
+E(X)tended signal is an API implementing Roblox's default Signal pattern, with some useful additions to help prevent memory leaks and manage multiple Signals. This should be compatible with any other Signal library. Only single args are supported for type system limitations, good practice, and performance reasons.
 
 ## Usage Examples (additional features vs regular Signals)
 
@@ -9,42 +9,50 @@ E(X)tended signal is an API implementing Roblox's default Signal pattern, with s
 ```lua
 local Test = XSignal.new() :: XSignal<number>
 local Result = Test:Wait(2) --> nil
-local SomethingElse = Test:Wait(2, true) -- Throws error due to timeout
+local SomethingElse = Test:Wait(2, true) -- Throws error due to timeout.
 ```
 
-### 2: Extension and "immediate fire" mode
+### 2: Signal extension
 
 ```lua
--- fromExtension wraps a generic Signal or a list of generic Signals and funnels invocations directly to the new constructed XSignal
-local PlayerExists = XSignal.fromExtension(Players.PlayerAdded, nil, function(Callback)
-    for _, Player in Players:GetPlayers() do
-        Callback(Player)
+-- fromExtension wraps a Signal or XSignal, or a list of generic Signals or XSignals, and funnels invocations directly to the new constructed XSignal.
+XSignal.fromExtension({Workspace.ChildAdded, Players.PlayerAdded}):Connect(function(Item)
+    if (Item:IsA("BasePart")) then
+        print("New part")
+        return
     end
+
+    print("New player")
 end)
 
-PlayerExists:Connect(function(Player)
-    -- This will fire for all existing players as soon as Connect is called, as well as when a player joins
-    -- ...
+-- Warning: packs variadics from other signal types into a table.
+XSignal.fromExtension({MarketplaceService.PromptProductPurchaseFinished}):Connect(function(Args)
+    local UserId = Args[1]
+    local ProductId = Args[2]
+    local IsPurchased = Args[3]
 end)
-
--- fromExtension also supports passing a list
-XSignal.fromExtension({ game:GetService("Workspace").ChildAdded, game:GetService("Players").PlayerAdded })
 ```
 
 ### 3: Data Validation
 
 ```lua
-local Test = XSignal.new(function(X, Y)
-    assert(typeof(X) == "number" and (Y == nil or typeof(Y) == "string"), "Type mismatch")
+local Test = XSignal.new(function(Value)
+    assert(
+        (typeof(Value) == "number" and Value > 0 and Value < 10) or
+        (typeof(Value) == "string") or
+        (Value == nil),
+        "Type mismatch"
+    )
 end)
 
-Test:Fire(1, "") -- Accept
+Test:Fire(1) -- Accept
 Test:Fire(2) -- Accept
+Test:Fire(11) -- Reject
 Test:Fire() -- Reject
 Test:Fire("") -- Reject
 
 -- Same as above but with TypeGuard: https://github.com/Novaly-Studios/TypeGuard
-local Another = XSignal.new(TypeGuard.Params(TypeGuard.Number(), TypeGuard.String():Optional())) :: XSignal<number, string?>
+local Another = XSignal.new(TypeGuard.Params(TypeGuard.Number(0, 10):Or(TypeGuard.String()):Optional())) :: XSignal<(number | string)?>
 ```
 
 ### 4: Waiting for the first of a list of Signals to fire
@@ -55,11 +63,12 @@ local Test2 = XSignal.new()
 local Test3 = Players.PlayerAdded
 
 task.delay(0.1, function()
-    Test1:Fire("Test1 fired", "Something else")
+    Test2:Fire("Test2 fired")
+    Test1:Fire("Test1 fired")
 end)
 
 print(XSignal.AwaitFirst({Test1, Test2, Test3}))
---> Test1 fired    Something else
+--> Test2 fired
 
 XSignal.AwaitFirst({Test1, Test2, Test3}, 10, true) -- Optional timeout & error on timeout args
 ```
@@ -74,25 +83,21 @@ local Test3 = XSignal.new()
 local function FireThem()
     Test1:Fire("Test1 fired")
     Test3:Fire("Test3 fired")
-    Test2:Fire("Test2 fired", "Another arg")
+    Test2:Fire("Test2 fired")
 end
 
 task.delay(0.1, FireThem)
-print(XSignal.AwaitAll({Test1, Test2, Test3})) -- Extracts only first arg
+print(XSignal.AwaitAll({Test1, Test2, Test3}))
 --> {"Test1 fired", "Test3 fired", "Test2 fired"}
 
-task.delay(0.1, FireThem)
-print(XSignal.AwaitAllFull({Test1, Test2, Test3}))
---> {{"Test1 fired"}, {"Test3 fired"}, {"Test2 fired", "Another arg"}}
-
- -- Optional timeout & error on timeout args
-XSignal.AwaitAllFull({Test1, Test2, Test3}, 10, true)
+-- Optional timeout & error on timeout args.
 XSignal.AwaitAll({Test1, Test2, Test3}, 10, true)
 ```
 
-### 6: Collecting first n fires
+### 6: Collecting values
 
 ```lua
+-- Collect first 2 values.
 local Test = XSignal.new()
 
 task.delay(0.1, function()
@@ -101,16 +106,61 @@ task.delay(0.1, function()
     Test:Fire("Test3 fired")
 end)
 
-print(Test:Collect(2))
---> {"Test1 fired", "Test2 fired"}
+local Result = Test:CollectN(2) -- Timeout & error on timeout args also supported.
+print(Result) --> {"Test1 fired", "Test2 fired"}
+
+-- Yield & collect first value which meets a condition.
+local Test = XSignal.new()
+local Result
 
 task.spawn(function()
-    task.wait()
-    Test:Fire("Test1 fired")
-    task.wait()
-    Test:Fire("Test2 fired")
+    Result = Test:CollectFirst(function(Value)
+        return Value > 10
+    end) -- Timeout & error on timeout args also supported.
 end)
 
-print(Test:CollectFull(2))
---> {{"Test1 fired"}, {"Test2 fired"}}
+for Count = 1, 15 do
+    Test:Fire(Count)
+end
+
+print(Result) --> 11
+```
+
+### 7: Fast / threadless connection & firing
+
+```lua
+-- Sometimes if we know a function won't yield, we can use a threadless connection.
+-- Activates in the same coroutine. Be cautious.
+local Test = XSignal.new()
+Test:Connect(function(Value)
+    print(Value)
+end, XSignal.FastDirect)
+Test:Fire(1)
+
+-- Protected call version.
+local Test = XSignal.new()
+Test:Connect(function(Value)
+    if (math.random() > 0.5) then
+        error("Fail")
+    end
+
+    print(Value)
+end, XSignal.Direct)
+Test:Fire(1)
+```
+
+### 8: Mapping values between signals
+
+```lua
+local Test = XSignal.new()
+local Stage1 = Test:Map(function(Value)
+    return Value * 2
+end)
+local Stage2 = Stage1:Map(function(Value)
+    return Value + 1
+end)
+Stage2:Connect(function(Value)
+    print("Final", Value)
+end)
+Test:Fire(4) --> Final 9
 ```
