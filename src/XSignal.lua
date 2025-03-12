@@ -569,4 +569,4 @@ function XSignal.AwaitAll(Signals: {GenericMinimalSignal<any>}, Timeout: number?
     return Reformatted
 end
 
-return XSignal
+return table.freeze(XSignal)

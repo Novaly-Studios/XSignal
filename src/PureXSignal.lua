@@ -602,4 +602,4 @@ local function AwaitAll(Signals, Timeout, ThrowErrorOnTimeout)
 end
 XSignal.AwaitAll = AwaitAll :: AwaitAll
 
-return XSignal
+return table.freeze(XSignal)
