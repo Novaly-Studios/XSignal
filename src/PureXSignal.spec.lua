@@ -4,7 +4,7 @@ expect = expect or anyfn
 describe = describe or anyfn
 
 return function()
-    local XSignal = require(script.Parent)
+    local XSignal = require(script.Parent.PureXSignal)
 
     describe("XSignal.new", function()
         it("should construct", function()
@@ -351,6 +351,21 @@ return function()
             Test:Fire(2)
             expect(Results[1]).to.equal(16)
             expect(Results[2]).to.equal(36)
+        end)
+    end)
+
+    describe("XSignal:CollectUntil", function()
+        it("should collect until the predicate returns true", function()
+            local Test = XSignal.new()
+            expect(function()
+                local Results = {}
+                task.spawn(function()
+                    Test:CollectUntil(function()
+                        return true
+                    end)
+                end)
+                
+            end).never.to.throw()
         end)
     end)
 

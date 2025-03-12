@@ -3,11 +3,16 @@
 registry = "test"
 
 [[package]]
-name = "tpc9000/typeguard"
-version = "5.0.0"
+name = "tpc9000/tableutil"
+version = "0.8.1"
 dependencies = []
 
 [[package]]
+name = "tpc9000/typeguard"
+version = "6.0.0-alpha.2"
+dependencies = [["TableUtil", "tpc9000/tableutil@0.8.1"]]
+
+[[package]]
 name = "tpc9000/xsignal"
-version = "2.0.0"
-dependencies = [["TypeGuard", "tpc9000/typeguard@5.0.0"]]
+version = "3.0.0"
+dependencies = [["TypeGuard", "tpc9000/typeguard@6.0.0-alpha.2"]]
