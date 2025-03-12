@@ -7,6 +7,8 @@ if (not script and Instance) then
     script = game:GetService("ReplicatedFirst").XSignal.PureXSignal
 end
 
+local TypeGuard = require(script.Parent.Parent:WaitForChild("TypeGuard"))
+
 export type Connection = {
     Disconnect: (() -> ());
     Connected: boolean;
@@ -75,8 +77,6 @@ local function CreateConnection(SignalObject): Connection
         _Next = false;
     }
 end
-
-local TypeGuard = require(script.Parent.Parent:WaitForChild("TypeGuard"))
 
 local AsyncModule = script.Parent:FindFirstChild("Async")
     local Async = AsyncModule and require(AsyncModule :: any) or nil
