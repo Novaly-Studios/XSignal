@@ -172,7 +172,7 @@ end
 
 local FromExtensionParams = TypeGuard.Params(
     TypeGuard.Or(
-        TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1),
+        TypeGuard.Array(GenericMinimalSignalTypeChecker):MinSize(1),
         GenericMinimalSignalTypeChecker
     )
 )
@@ -419,7 +419,7 @@ end
 XSignal.DisconnectAll = XSignal.Destroy
 
 local AwaitFirstParams = TypeGuard.Params(
-    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1),
+    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinSize(1),
     TypeGuard.Optional(TypeGuard.Number()),
     TypeGuard.Optional(TypeGuard.Boolean())
 )
@@ -484,7 +484,7 @@ function XSignal.AwaitFirst(Signals: {GenericMinimalSignal<any>}, Timeout: numbe
 end
 
 local AwaitAllFullParams = TypeGuard.Params(
-    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1),
+    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinSize(1),
     TypeGuard.Optional(TypeGuard.Number()),
     TypeGuard.Optional(TypeGuard.Boolean())
 )
@@ -550,7 +550,7 @@ function XSignal.AwaitAllFull(Signals: {GenericMinimalSignal<any>}, Timeout: num
 end
 
 local AwaitAllParams = TypeGuard.Params(
-    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinLength(1),
+    TypeGuard.Array(GenericMinimalSignalTypeChecker):MinSize(1),
     TypeGuard.Optional(TypeGuard.Number()),
     TypeGuard.Optional(TypeGuard.Boolean())
 )

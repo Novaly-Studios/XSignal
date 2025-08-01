@@ -244,7 +244,7 @@ XSignal.Fire = Fire
 
 local FromExtensionParams = TypeGuard.Params(
     TypeGuard.Or(
-        TypeGuard.Array(MinimalSignalTypeChecker):MinLength(1),
+        TypeGuard.Array(MinimalSignalTypeChecker):MinSize(1),
         MinimalSignalTypeChecker
     )
 )
